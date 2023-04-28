@@ -1,29 +1,17 @@
 mod memory;
 
-use crate::types::{Address, Instruction, Line};
+use crate::types::{Instruction, Line};
 
-use self::memory::Memory;
+pub use self::memory::{FileMemory, InMemoryMemory, Memory};
 
-#[derive(Default)]
-pub struct Machine {
-    memory: Memory,
+#[derive(Debug, Default)]
+pub struct Machine<Mem: Memory> {
+    pub memory: Mem,
 }
 
-impl Machine {
-    pub fn new() -> Self {
-        Machine {
-            memory: Memory::default(),
-        }
-    }
-
-    pub fn load(&mut self, program: impl Into<Memory>) {
-        self.memory = program.into();
-    }
-
-    pub fn with_program(program: impl Into<Memory>) -> Self {
-        let mut machine = Self::new();
-        machine.load(program);
-        machine
+impl<Mem: Memory> Machine<Mem> {
+    pub fn with_memory(memory: Mem) -> Self {
+        Machine { memory }
     }
 
     fn run_line(&mut self, line: Line) {
@@ -66,7 +54,7 @@ impl Machine {
             Instruction::MoveIndirect(_, _) => todo!(),
             Instruction::MoveIntegerUnsigned(int, address) => self
                 .memory
-                .set(address, Line::new(int, 0_u64, 0_u64, 0_u64)),
+                .set(address, Line::new(int, 0_u32, 0_u32, 0_u32)),
             Instruction::MoveIntegerSigned(_, _) => todo!(),
             Instruction::MoveFloat(_, _) => todo!(),
             Instruction::Syscall(_, _) => todo!(),
@@ -78,66 +66,76 @@ impl Machine {
             self.run_line(line);
         }
     }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        self.memory.as_bytes()
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::machine::memory::InMemoryMemory;
+
     use super::*;
 
     #[test]
     fn running_empty_program_returns_successfully() {
-        let mut machine = Machine::new();
+        let mut machine = Machine::with_memory(InMemoryMemory::default());
         machine.run();
-        assert_eq!(machine.memory, Memory::default());
+        assert_eq!(machine.memory, InMemoryMemory::default());
     }
 
     #[test]
     fn running_program_containing_noops_returns_successfully() {
-        let mut machine = Machine::with_program(vec![Line::from(Instruction::NoOperation())]);
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
+            Instruction::NoOperation(),
+        )]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![Line::from(Instruction::NoOperation())]).with_offset(1)
+            InMemoryMemory::from(vec![Line::from(Instruction::NoOperation())]).with_offset(1)
         );
     }
 
     #[test]
     fn running_program_that_jumps_outside_of_program_bounds_runs_correctly() {
-        let mut machine = Machine::with_program(vec![Line::from(Instruction::Jump(100.into()))]);
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
+            Instruction::Jump(100.into()),
+        )]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![Line::from(Instruction::Jump(100.into()))]).with_offset(100)
+            InMemoryMemory::from(vec![Line::from(Instruction::Jump(100.into()))]).with_offset(100)
         );
     }
 
     #[test]
     fn running_program_that_sets_data_runs_correctly() {
-        let mut machine = Machine::with_program(vec![Line::from(
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
             Instruction::MoveIntegerUnsigned(123.into(), 0.into()),
-        )]);
+        )]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![Line::new(123_u64, 0_u64, 0_u64, 0_u64)]).with_offset(1)
+            InMemoryMemory::from(vec![Line::new(123_u32, 0_u32, 0_u32, 0_u32)]).with_offset(1)
         );
     }
 
     #[test]
     fn setting_future_memory_is_possible() {
-        let mut machine = Machine::with_program(vec![Line::from(
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
             Instruction::MoveIntegerUnsigned(999.into(), 5.into()),
-        )]);
+        )]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![
+            InMemoryMemory::from(vec![
                 Line::from(Instruction::MoveIntegerUnsigned(999.into(), 5.into())),
-                Line::new(0_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(0_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(0_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(0_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(999_u64, 0_u64, 0_u64, 0_u64),
+                Line::new(0_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(999_u32, 0_u32, 0_u32, 0_u32),
             ])
             .with_offset(6)
         );
@@ -145,19 +143,19 @@ mod tests {
 
     #[test]
     fn jump_not_equal_jumps_if_the_memory_addresses_are_unequal() {
-        let mut machine = Machine::with_program(vec![
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
             Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
-            Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-            Line::new(1001_u64, 0_u64, 0_u64, 0_u64),
+            Line::new(1000_u32, 0_u32, 0_u32, 0_u32),
+            Line::new(1001_u32, 0_u32, 0_u32, 0_u32),
             Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
-        ]);
+        ]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![
+            InMemoryMemory::from(vec![
                 Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
-                Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(1001_u64, 0_u64, 0_u64, 0_u64),
+                Line::new(1000_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(1001_u32, 0_u32, 0_u32, 0_u32),
                 Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
             ])
             .with_offset(4)
@@ -166,20 +164,20 @@ mod tests {
 
     #[test]
     fn jump_not_equal_does_not_jump_if_the_memory_addresses_are_the_same() {
-        let mut machine = Machine::with_program(vec![
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
             Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
-            Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-            Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-            Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
-        ]);
+            Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
+            Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
+            Line::from(Instruction::MoveIntegerUnsigned(0x99_00.into(), 0.into())),
+        ]));
         machine.run();
         assert_eq!(
             machine.memory,
-            Memory::from(vec![
-                Line::new(999_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-                Line::new(1000_u64, 0_u64, 0_u64, 0_u64),
-                Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
+            InMemoryMemory::from(vec![
+                Line::new(0x99_00_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
+                Line::from(Instruction::MoveIntegerUnsigned(0x99_00.into(), 0.into())),
             ])
             .with_offset(4)
         );

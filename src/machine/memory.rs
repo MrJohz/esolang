@@ -1,13 +1,18 @@
-use std::{fs::File, io::Read, io::Seek};
+use std::{
+    fs::File,
+    io::Read,
+    io::{Result, SeekFrom},
+    io::{Seek, Write},
+    path::Path,
+};
 
-use crate::types::{Address, Line};
+use crate::types::{Address, Instruction, Line};
 
 pub trait Memory {
     fn read_next(&mut self) -> Option<Line>;
     fn get(&mut self, address: impl Into<Address>) -> Option<Line>;
     fn set(&mut self, address: impl Into<Address>, line: impl Into<Line>);
     fn set_offset(&mut self, address: impl Into<Address>);
-    fn as_bytes(&self) -> Vec<u8>;
 }
 
 #[derive(Debug)]
@@ -16,8 +21,14 @@ pub struct FileMemory {
 }
 
 impl FileMemory {
-    pub fn new(file: File) -> Self {
-        FileMemory { file }
+    pub fn new(file: impl AsRef<Path>) -> Result<Self> {
+        Ok(FileMemory {
+            file: File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(file.as_ref())?,
+        })
     }
 }
 
@@ -32,11 +43,7 @@ impl Memory for FileMemory {
     fn get(&mut self, address: impl Into<Address>) -> Option<Line> {
         let cursor = self.file.stream_position().unwrap();
 
-        self.file
-            .seek(std::io::SeekFrom::Start(u64::from(u32::from(
-                address.into(),
-            ))))
-            .ok()?;
+        self.set_offset(address);
         let mut buffer = [0_u8; 16];
         self.file.read_exact(&mut buffer).ok()?;
         let line = Line::from(buffer);
@@ -49,15 +56,21 @@ impl Memory for FileMemory {
     }
 
     fn set(&mut self, address: impl Into<Address>, line: impl Into<Line>) {
-        todo!()
+        let cursor = self.file.stream_position().unwrap();
+        self.set_offset(address);
+        let line = line.into();
+        self.file
+            .write_all(&line.as_bytes())
+            .expect("Failed to write line");
+        self.file
+            .seek(std::io::SeekFrom::Start(cursor))
+            .expect("Failed to seek back to original position");
     }
 
     fn set_offset(&mut self, address: impl Into<Address>) {
-        todo!()
-    }
-
-    fn as_bytes(&self) -> Vec<u8> {
-        todo!()
+        let address = u64::from(u32::from(address.into()));
+        let position = SeekFrom::Start(address * 16);
+        self.file.seek(position).expect("Failed to seek to address");
     }
 }
 
@@ -105,13 +118,6 @@ impl Memory for InMemoryMemory {
         }
 
         self.memory[address] = line.into();
-    }
-
-    fn as_bytes(&self) -> Vec<u8> {
-        self.memory
-            .iter()
-            .flat_map(|line| line.as_bytes().to_vec())
-            .collect()
     }
 }
 

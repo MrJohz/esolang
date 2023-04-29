@@ -66,10 +66,6 @@ impl<Mem: Memory> Machine<Mem> {
             self.run_line(line);
         }
     }
-
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.memory.as_bytes()
-    }
 }
 
 #[cfg(test)]

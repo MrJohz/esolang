@@ -254,4 +254,13 @@ mod tests {
             Instruction::JumpIfNotEqual(Address::from(10), Address::from(11), Address::from(12))
         );
     }
+
+    #[test]
+    fn can_create_line_from_byte_array() {
+        let line = Line::from([
+            0x63_u8, 0x00, 0x00, 0x00, 0x99, 0x99, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ]);
+        assert_eq!(line, Line::from([0x63, 0x9999, 0x06, 0x00]))
+    }
 }

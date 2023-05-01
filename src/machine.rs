@@ -27,36 +27,22 @@ impl<Mem: Memory> Machine<Mem> {
             }
             Instruction::JumpIfLessThan(_, _, _) => todo!(),
             Instruction::AddIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::AddConstIntegerUnsigned(_, _, _) => todo!(),
             Instruction::AddIntegerSigned(_, _, _) => todo!(),
-            Instruction::AddConstIntegerSigned(_, _, _) => todo!(),
             Instruction::SubtractIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::SubtractConstIntegerUnsigned(_, _, _) => todo!(),
             Instruction::SubtractIntegerSigned(_, _, _) => todo!(),
-            Instruction::SubtractConstIntegerSigned(_, _, _) => todo!(),
             Instruction::MultiplyIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::MultiplyConstIntegerUnsigned(_, _, _) => todo!(),
             Instruction::MultiplyIntegerSigned(_, _, _) => todo!(),
-            Instruction::MultiplyConstIntegerSigned(_, _, _) => todo!(),
             Instruction::DivideIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::DivideConstIntegerUnsigned(_, _, _) => todo!(),
             Instruction::DivideIntegerSigned(_, _, _) => todo!(),
-            Instruction::DivideConstIntegerSigned(_, _, _) => todo!(),
             Instruction::AddFloat(_, _, _) => todo!(),
-            Instruction::AddConstFloat(_, _, _) => todo!(),
             Instruction::SubtractFloat(_, _, _) => todo!(),
-            Instruction::SubtractConstFloat(_, _, _) => todo!(),
             Instruction::MultiplyFloat(_, _, _) => todo!(),
-            Instruction::MultiplyConstFloat(_, _, _) => todo!(),
             Instruction::DivideFloat(_, _, _) => todo!(),
-            Instruction::DivideConstFloat(_, _, _) => todo!(),
-            Instruction::MoveStatic(_, _) => todo!(),
+            Instruction::MoveStatic(from, to) => {
+                let line = self.memory.get(from).unwrap_or_default();
+                self.memory.set(to, line)
+            }
             Instruction::MoveIndirect(_, _) => todo!(),
-            Instruction::MoveIntegerUnsigned(int, address) => self
-                .memory
-                .set(address, Line::new(int, 0_u32, 0_u32, 0_u32)),
-            Instruction::MoveIntegerSigned(_, _) => todo!(),
-            Instruction::MoveFloat(_, _) => todo!(),
             Instruction::Syscall(_, _) => todo!(),
         }
     }
@@ -107,31 +93,39 @@ mod tests {
 
     #[test]
     fn running_program_that_sets_data_runs_correctly() {
-        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
-            Instruction::MoveIntegerUnsigned(123.into(), 0.into()),
-        )]));
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
+            Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
+            Line::new(0x99_00_u32, 0_u32, 0_u32, 0_u32),
+            Line::from(Instruction::MoveStatic(0.into(), 1.into())),
+        ]));
         machine.run();
         assert_eq!(
             machine.memory,
-            InMemoryMemory::from(vec![Line::new(123_u32, 0_u32, 0_u32, 0_u32)]).with_offset(1)
+            InMemoryMemory::from(vec![
+                Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
+                Line::from(Instruction::MoveStatic(0.into(), 1.into())),
+            ])
+            .with_offset(3)
         );
     }
 
     #[test]
     fn setting_future_memory_is_possible() {
-        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![Line::from(
-            Instruction::MoveIntegerUnsigned(999.into(), 5.into()),
-        )]));
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
+            Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
+            Line::from(Instruction::MoveStatic(0.into(), 5.into())),
+        ]));
         machine.run();
         assert_eq!(
             machine.memory,
             InMemoryMemory::from(vec![
-                Line::from(Instruction::MoveIntegerUnsigned(999.into(), 5.into())),
+                Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
+                Line::from(Instruction::MoveStatic(0.into(), 5.into())),
                 Line::new(0_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(0_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(0_u32, 0_u32, 0_u32, 0_u32),
-                Line::new(0_u32, 0_u32, 0_u32, 0_u32),
-                Line::new(999_u32, 0_u32, 0_u32, 0_u32),
+                Line::new(0x99_99_u32, 0_u32, 0_u32, 0_u32),
             ])
             .with_offset(6)
         );
@@ -143,7 +137,7 @@ mod tests {
             Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
             Line::new(1000_u32, 0_u32, 0_u32, 0_u32),
             Line::new(1001_u32, 0_u32, 0_u32, 0_u32),
-            Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
+            Line::from(Instruction::MoveStatic(1.into(), 0.into())),
         ]));
         machine.run();
         assert_eq!(
@@ -152,7 +146,7 @@ mod tests {
                 Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
                 Line::new(1000_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(1001_u32, 0_u32, 0_u32, 0_u32),
-                Line::from(Instruction::MoveIntegerUnsigned(999.into(), 0.into())),
+                Line::from(Instruction::MoveStatic(1.into(), 0.into())),
             ])
             .with_offset(4)
         );
@@ -164,16 +158,16 @@ mod tests {
             Line::from(Instruction::JumpIfNotEqual(1.into(), 2.into(), 4.into())),
             Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
             Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
-            Line::from(Instruction::MoveIntegerUnsigned(0x99_00.into(), 0.into())),
+            Line::from(Instruction::MoveStatic(1.into(), 0.into())),
         ]));
         machine.run();
         assert_eq!(
             machine.memory,
             InMemoryMemory::from(vec![
-                Line::new(0x99_00_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
-                Line::from(Instruction::MoveIntegerUnsigned(0x99_00.into(), 0.into())),
+                Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
+                Line::from(Instruction::MoveStatic(1.into(), 0.into())),
             ])
             .with_offset(4)
         );

@@ -176,44 +176,26 @@ instructions! {
 
     // Maths on integers
     0x11 => AddIntegerUnsigned(Address left, Address right, Address to),
-    0x12 => AddConstIntegerUnsigned(Address left, UnsignedInteger right, Address to),
-    0x13 => AddIntegerSigned(Address left, Address right, Address to),
-    0x14 => AddConstIntegerSigned(Address left, SignedInteger right, Address to),
+    0x12 => AddIntegerSigned(Address left, Address right, Address to),
 
     0x21 => SubtractIntegerUnsigned(Address left, Address right, Address to),
-    0x22 => SubtractConstIntegerUnsigned(Address left, UnsignedInteger right, Address to),
-    0x23 => SubtractIntegerSigned(Address left, Address right, Address to),
-    0x24 => SubtractConstIntegerSigned(Address left, SignedInteger right, Address to),
+    0x22 => SubtractIntegerSigned(Address left, Address right, Address to),
 
     0x31 => MultiplyIntegerUnsigned(Address left, Address right, Address to),
-    0x32 => MultiplyConstIntegerUnsigned(Address left, UnsignedInteger right, Address to),
-    0x33 => MultiplyIntegerSigned(Address left, Address right, Address to),
-    0x34 =>  MultiplyConstIntegerSigned(Address left, SignedInteger right, Address to),
+    0x32 => MultiplyIntegerSigned(Address left, Address right, Address to),
 
     0x41 => DivideIntegerUnsigned(Address left, Address right, Address to),
-    0x42 => DivideConstIntegerUnsigned(Address left, UnsignedInteger right, Address to),
-    0x43 => DivideIntegerSigned(Address left, Address right, Address to),
-    0x44 => DivideConstIntegerSigned(Address left, SignedInteger right, Address to),
+    0x42 => DivideIntegerSigned(Address left, Address right, Address to),
 
     // Maths on floats
     0x51 => AddFloat(Address left, Address right, Address to),
-    0x52 => AddConstFloat(Address left, Float right, Address to),
-
-    0x53 => SubtractFloat(Address left, Address right, Address to),
-    0x54 => SubtractConstFloat(Address left, Float right, Address to),
-
-    0x55 => MultiplyFloat(Address left, Address right, Address to),
-    0x56 => MultiplyConstFloat(Address left, Float right, Address to),
-
-    0x57 => DivideFloat(Address left, Address right, Address to),
-    0x58 => DivideConstFloat(Address left, Float right, Address to),
+    0x52 => SubtractFloat(Address left, Address right, Address to),
+    0x53 => MultiplyFloat(Address left, Address right, Address to),
+    0x54 => DivideFloat(Address left, Address right, Address to),
 
     // Memory movement
     0x61 => MoveStatic(Address from, Address to),
     0x62 => MoveIndirect(Address from, Address to),
-    0x63 => MoveIntegerUnsigned(UnsignedInteger from, Address to),
-    0x64 => MoveIntegerSigned(SignedInteger from, Address to),
-    0x65 => MoveFloat(Float from, Address to),
 
     // Syscall
     0x71 => Syscall(UnsignedInteger syscall, Address argument),

@@ -15,36 +15,8 @@ impl<Mem: Memory> Machine<Mem> {
     }
 
     fn run_line(&mut self, line: Line) {
-        match line.into() {
-            Instruction::NoOperation() => {}
-            Instruction::Jump(address) => {
-                self.memory.set_offset(address);
-            }
-            Instruction::JumpIfNotEqual(left, right, address) => {
-                if self.memory.get(left) != self.memory.get(right) {
-                    self.memory.set_offset(address);
-                }
-            }
-            Instruction::JumpIfLessThan(_, _, _) => todo!(),
-            Instruction::AddIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::AddIntegerSigned(_, _, _) => todo!(),
-            Instruction::SubtractIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::SubtractIntegerSigned(_, _, _) => todo!(),
-            Instruction::MultiplyIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::MultiplyIntegerSigned(_, _, _) => todo!(),
-            Instruction::DivideIntegerUnsigned(_, _, _) => todo!(),
-            Instruction::DivideIntegerSigned(_, _, _) => todo!(),
-            Instruction::AddFloat(_, _, _) => todo!(),
-            Instruction::SubtractFloat(_, _, _) => todo!(),
-            Instruction::MultiplyFloat(_, _, _) => todo!(),
-            Instruction::DivideFloat(_, _, _) => todo!(),
-            Instruction::MoveStatic(from, to) => {
-                let line = self.memory.get(from).unwrap_or_default();
-                self.memory.set(to, line)
-            }
-            Instruction::MoveIndirect(_, _) => todo!(),
-            Instruction::Syscall(_, _) => todo!(),
-        }
+        let instruction: Instruction = line.into();
+        instruction.execute(&mut self.memory);
     }
 
     pub fn run(&mut self) {
@@ -168,6 +140,54 @@ mod tests {
                 Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
                 Line::new(0x10_00_u32, 0_u32, 0_u32, 0_u32),
                 Line::from(Instruction::MoveStatic(1.into(), 0.into())),
+            ])
+            .with_offset(4)
+        );
+    }
+
+    #[test]
+    fn adding_unsigned_64_bit_integers() {
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
+            Line::from(Instruction::AddIntegerUnsigned(
+                1.into(),
+                2.into(),
+                3.into(),
+            )),
+            Line::new(0x10_00_u32, 0x01_u32, 0x03_u32, 0x05_u32),
+            Line::new(0x10_00_u32, 0x02_u32, 0x04_u32, 0x06_u32),
+        ]));
+        machine.run();
+        assert_eq!(
+            machine.memory,
+            InMemoryMemory::from(vec![
+                Line::from(Instruction::AddIntegerUnsigned(
+                    1.into(),
+                    2.into(),
+                    3.into()
+                )),
+                Line::new(0x10_00_u32, 0x01_u32, 0x03_u32, 0x05_u32),
+                Line::new(0x10_00_u32, 0x02_u32, 0x04_u32, 0x06_u32),
+                Line::new(0x20_00_u32, 0x03_u32, 0x00_u32, 0x00_u32),
+            ])
+            .with_offset(4)
+        );
+    }
+
+    #[test]
+    fn adding_signed_64_bit_integers() {
+        let mut machine = Machine::with_memory(InMemoryMemory::from(vec![
+            Line::from(Instruction::AddIntegerSigned(1.into(), 2.into(), 3.into())),
+            Line::new(0x10_00_u32, 0x01_u32, 0x03_u32, 0x05_u32),
+            Line::new(0x10_00_u32, 0x02_u32, 0x04_u32, 0x06_u32),
+        ]));
+        machine.run();
+        assert_eq!(
+            machine.memory,
+            InMemoryMemory::from(vec![
+                Line::from(Instruction::AddIntegerSigned(1.into(), 2.into(), 3.into())),
+                Line::new(0x10_00_u32, 0x01_u32, 0x03_u32, 0x05_u32),
+                Line::new(0x10_00_u32, 0x02_u32, 0x04_u32, 0x06_u32),
+                Line::new(0x20_00_u32, 0x03_u32, 0x00_u32, 0x00_u32),
             ])
             .with_offset(4)
         );

@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use crate::types::{Address, Instruction, Line};
+use crate::types::{Address, Line};
 
 pub trait Memory {
     fn read_next(&mut self) -> Option<Line>;
@@ -60,7 +60,7 @@ impl Memory for FileMemory {
         self.set_offset(address);
         let line = line.into();
         self.file
-            .write_all(&line.as_bytes())
+            .write_all(&line.as_bytes::<16>())
             .expect("Failed to write line");
         self.file
             .seek(std::io::SeekFrom::Start(cursor))

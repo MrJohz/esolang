@@ -2,9 +2,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-mod machine;
-mod memory;
-mod types;
+use esolang::machine;
+use esolang::memory;
 
 #[derive(Debug, clap::Parser)]
 #[command(author, version, about, long_about = None)]

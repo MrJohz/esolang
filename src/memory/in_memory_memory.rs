@@ -1,4 +1,4 @@
-use crate::types::ReadWriteable;
+use crate::types::{Instruction, ReadWriteable};
 
 use super::Memory;
 
@@ -11,6 +11,10 @@ pub struct InMemoryMemory {
 impl InMemoryMemory {
     pub fn from_vec(memory: Vec<u8>) -> Self {
         InMemoryMemory { pc: 0, memory }
+    }
+
+    pub fn builder() -> InMemoryBuilder {
+        InMemoryBuilder::new()
     }
 }
 
@@ -45,5 +49,45 @@ impl Memory for InMemoryMemory {
     fn seek(&mut self, pos: i16) -> Result<(), Self::Error> {
         self.pc = (self.pc as i16 + pos) as usize;
         Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct InMemoryBuilder {
+    memory: Vec<u8>,
+}
+
+impl InMemoryBuilder {
+    pub fn new() -> Self {
+        InMemoryBuilder { memory: Vec::new() }
+    }
+
+    pub fn instruction<Rw: ReadWriteable>(mut self, instruction: Instruction, args: Rw) -> Self {
+        self.memory.push(instruction as u8);
+        let mut buffer = vec![0_u8; Rw::NUM_BYTES];
+        args.into_bytes(&mut buffer);
+        self.memory.extend_from_slice(&buffer);
+        self
+    }
+
+    pub fn data<Rw: ReadWriteable>(mut self, data: Rw) -> Self {
+        let mut buffer = vec![0_u8; Rw::NUM_BYTES];
+        data.into_bytes(&mut buffer);
+        self.memory.extend_from_slice(&buffer);
+        self
+    }
+
+    pub fn byte(mut self, byte: u8) -> Self {
+        self.memory.push(byte);
+        self
+    }
+
+    pub fn bytes(mut self, bytes: &[u8]) -> Self {
+        self.memory.extend_from_slice(bytes);
+        self
+    }
+
+    pub fn build(self) -> InMemoryMemory {
+        InMemoryMemory::from_vec(self.memory)
     }
 }

@@ -1,18 +1,20 @@
 use std::{
     fs::File,
     io::Read,
-    io::{Result, SeekFrom},
+    io::{Result as IoResult, SeekFrom},
     io::{Seek, Write},
     path::Path,
 };
 
-use crate::types::{Address, Line};
+use crate::types::ReadWriteable;
 
 pub trait Memory {
-    fn read_next(&mut self) -> Option<Line>;
-    fn get(&mut self, address: impl Into<Address>) -> Option<Line>;
-    fn set(&mut self, address: impl Into<Address>, line: impl Into<Line>);
-    fn set_offset(&mut self, address: impl Into<Address>);
+    type Error;
+
+    fn read<T: ReadWriteable>(&mut self) -> Result<T, Self::Error>;
+    fn read_if_present<T: ReadWriteable>(&mut self) -> Result<Option<T>, Self::Error>;
+    fn write<T: ReadWriteable>(&mut self, value: T) -> Result<(), Self::Error>;
+    fn seek(&mut self, pos: i16) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug)]
@@ -21,7 +23,7 @@ pub struct FileMemory {
 }
 
 impl FileMemory {
-    pub fn new(file: impl AsRef<Path>) -> Result<Self> {
+    pub fn new(file: impl AsRef<Path>) -> IoResult<Self> {
         Ok(FileMemory {
             file: File::options()
                 .read(true)
@@ -33,99 +35,86 @@ impl FileMemory {
 }
 
 impl Memory for FileMemory {
-    fn read_next(&mut self) -> Option<Line> {
-        let mut buffer = [0_u8; 16];
-        self.file.read_exact(&mut buffer).ok()?;
-        let line = Line::from(buffer);
-        Some(line)
+    type Error = std::io::Error;
+
+    fn read<T: ReadWriteable>(&mut self) -> Result<T, Self::Error> {
+        // NOTE: With full const generics, we should be able to define the
+        // buffer size as exactly T::NUM_BYTES, which might(?) allow
+        // the compiler to optimize this better and will be clearer
+
+        let mut buffer = [0_u8; 8];
+        self.file.read_exact(&mut buffer[0..T::NUM_BYTES])?;
+        let value = T::from_bytes(&buffer);
+        Ok(value)
     }
 
-    fn get(&mut self, address: impl Into<Address>) -> Option<Line> {
-        let cursor = self.file.stream_position().unwrap();
-
-        self.set_offset(address);
-        let mut buffer = [0_u8; 16];
-        self.file.read_exact(&mut buffer).ok()?;
-        let line = Line::from(buffer);
-
-        self.file
-            .seek(std::io::SeekFrom::Start(cursor))
-            .expect("Failed to seek back to original position");
-
-        Some(line)
-    }
-
-    fn set(&mut self, address: impl Into<Address>, line: impl Into<Line>) {
-        let cursor = self.file.stream_position().unwrap();
-        self.set_offset(address);
-        let line = line.into();
-        self.file
-            .write_all(&line.as_bytes::<16>())
-            .expect("Failed to write line");
-        self.file
-            .seek(std::io::SeekFrom::Start(cursor))
-            .expect("Failed to seek back to original position");
-    }
-
-    fn set_offset(&mut self, address: impl Into<Address>) {
-        let address = u64::from(u32::from(address.into()));
-        let position = SeekFrom::Start(address * 16);
-        self.file.seek(position).expect("Failed to seek to address");
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct InMemoryMemory {
-    pc: Address,
-    memory: Vec<Line>,
-}
-
-impl InMemoryMemory {
-    pub fn from_vec(memory: Vec<Line>) -> Self {
-        InMemoryMemory {
-            pc: Address::from(0),
-            memory,
+    fn read_if_present<T: ReadWriteable>(&mut self) -> Result<Option<T>, Self::Error> {
+        let mut buffer = [0_u8; 8];
+        match self.file.read_exact(&mut buffer[0..T::NUM_BYTES]) {
+            Ok(_) => {
+                let value = T::from_bytes(&buffer);
+                Ok(Some(value))
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(None),
+            Err(err) => Err(err),
         }
     }
 
-    pub fn with_offset(mut self, address: impl Into<Address>) -> Self {
-        self.pc = address.into();
-        self
+    fn write<T: ReadWriteable>(&mut self, value: T) -> Result<(), Self::Error> {
+        let mut buffer = [0_u8; 8];
+        value.into_bytes(&mut buffer[0..T::NUM_BYTES]);
+        self.file.write_all(&buffer[0..T::NUM_BYTES])?;
+        Ok(())
+    }
+
+    fn seek(&mut self, pos: i16) -> Result<(), Self::Error> {
+        self.file.seek(SeekFrom::Current(pos as i64))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct InMemoryMemory {
+    pub pc: usize,
+    pub memory: Vec<u8>,
+}
+
+impl InMemoryMemory {
+    pub fn from_vec(memory: Vec<u8>) -> Self {
+        InMemoryMemory { pc: 0, memory }
     }
 }
 
 impl Memory for InMemoryMemory {
-    fn read_next(&mut self) -> Option<Line> {
-        let line = self.get(self.pc);
-        if line.is_some() {
-            self.pc.incr();
+    type Error = ();
+
+    fn read<T: ReadWriteable>(&mut self) -> Result<T, Self::Error> {
+        let buffer = dbg!(&self.memory[dbg!(self.pc)..self.pc + dbg!(T::NUM_BYTES)]);
+        self.pc += T::NUM_BYTES;
+        Ok(T::from_bytes(buffer))
+    }
+
+    fn read_if_present<T: ReadWriteable>(&mut self) -> Result<Option<T>, Self::Error> {
+        if (self.pc + T::NUM_BYTES) > self.memory.len() {
+            return Ok(None);
         }
-        line
+        let buffer = &self.memory[self.pc..self.pc + T::NUM_BYTES];
+        self.pc += T::NUM_BYTES;
+        Ok(Some(T::from_bytes(buffer)))
     }
 
-    fn set_offset(&mut self, address: impl Into<Address>) {
-        self.pc = address.into();
-    }
-
-    fn get(&mut self, address: impl Into<Address>) -> Option<Line> {
-        self.memory.get(u32::from(address.into()) as usize).copied()
-    }
-
-    fn set(&mut self, address: impl Into<Address>, line: impl Into<Line>) {
-        let address = u32::from(address.into()) as usize;
-        if (address + 1) > self.memory.len() {
-            self.memory.resize(address + 1, Line::default());
+    fn write<T: ReadWriteable>(&mut self, value: T) -> Result<(), Self::Error> {
+        if self.pc + T::NUM_BYTES > self.memory.len() {
+            self.memory.resize(self.pc + T::NUM_BYTES, 0);
         }
 
-        self.memory[address] = line.into();
+        let buffer = &mut self.memory[self.pc..self.pc + T::NUM_BYTES];
+        value.into_bytes(buffer);
+        Ok(())
     }
-}
 
-impl From<Vec<Line>> for InMemoryMemory {
-    fn from(memory: Vec<Line>) -> Self {
-        InMemoryMemory {
-            pc: Address::from(0),
-            memory,
-        }
+    fn seek(&mut self, pos: i16) -> Result<(), Self::Error> {
+        self.pc = (self.pc as i16 + pos) as usize;
+        Ok(())
     }
 }

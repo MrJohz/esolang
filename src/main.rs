@@ -11,11 +11,12 @@ struct Args {
     name: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
 
     let memory = machine::FileMemory::new(args.name).unwrap();
     let mut machine = machine::Machine::with_memory(memory);
 
-    machine.run();
+    machine.run()?;
+    Ok(())
 }

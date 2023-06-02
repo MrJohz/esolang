@@ -1,338 +1,407 @@
-use std::ops::Add;
+use crate::machine::Memory;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Address(u32);
+pub trait ReadWriteable {
+    // NOTE: With full const generics, we can(?) replace
+    // the &[u8] with [u8; NUM_BYTES] to ensure that the
+    // bytes sizes are always statically correct
+    const NUM_BYTES: usize;
 
-impl Address {
-    pub fn incr(&mut self) {
-        self.0 += 1;
+    fn from_bytes(bytes: &[u8]) -> Self;
+    fn into_bytes(self, bytes: &mut [u8]);
+}
+
+impl<const N: usize> ReadWriteable for [u8; N] {
+    const NUM_BYTES: usize = N;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        let mut result = [0_u8; N];
+        result.copy_from_slice(&bytes[0..N]);
+        result
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes[0..N].copy_from_slice(&self);
     }
 }
 
-impl From<u32> for Address {
-    fn from(val: u32) -> Self {
-        Address(val)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Offset(i16);
+
+impl ReadWriteable for Offset {
+    const NUM_BYTES: usize = 2;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Offset(i16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0.to_le_bytes());
     }
 }
 
-impl From<Address> for u32 {
-    fn from(val: Address) -> Self {
-        val.0
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Boolean(bool);
+
+impl ReadWriteable for Boolean {
+    const NUM_BYTES: usize = 1;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Boolean(bytes[0] != 0)
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes[0] = self.0 as u8;
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UnsignedInteger(u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Integer64(u64);
 
-impl From<u32> for UnsignedInteger {
-    fn from(val: u32) -> Self {
-        UnsignedInteger(val as u64)
+impl ReadWriteable for Integer64 {
+    const NUM_BYTES: usize = 8;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Integer64(u64::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]))
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0.to_le_bytes());
     }
 }
 
-impl From<UnsignedInteger> for u32 {
-    fn from(val: UnsignedInteger) -> Self {
-        val.0 as u32
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Integer32(u32);
+
+impl ReadWriteable for Integer32 {
+    const NUM_BYTES: usize = 4;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Integer32(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0.to_le_bytes());
     }
 }
 
-impl From<u64> for UnsignedInteger {
-    fn from(val: u64) -> Self {
-        UnsignedInteger(val)
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Float32(f32);
+
+impl ReadWriteable for Float32 {
+    const NUM_BYTES: usize = 4;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Float32(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0.to_le_bytes());
     }
 }
 
-impl From<Line> for UnsignedInteger {
-    fn from(val: Line) -> Self {
-        UnsignedInteger(u64::from_ne_bytes(val.as_bytes()))
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Float64(f64);
 
-impl From<UnsignedInteger> for Line {
-    fn from(val: UnsignedInteger) -> Self {
-        let bytes = val.0.to_ne_bytes();
+impl ReadWriteable for Float64 {
+    const NUM_BYTES: usize = 8;
 
-        Line::new(
-            u32::from_ne_bytes(bytes[0..4].try_into().unwrap()),
-            u32::from_ne_bytes(bytes[4..8].try_into().unwrap()),
-            0_u32,
-            0_u32,
-        )
-    }
-}
-
-impl Add for UnsignedInteger {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        UnsignedInteger(self.0 + rhs.0)
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SignedInteger(i64);
-
-impl From<i64> for SignedInteger {
-    fn from(val: i64) -> Self {
-        SignedInteger(val)
-    }
-}
-
-impl From<Line> for SignedInteger {
-    fn from(val: Line) -> Self {
-        Self(i64::from_ne_bytes(val.as_bytes()))
-    }
-}
-
-impl From<SignedInteger> for Line {
-    fn from(val: SignedInteger) -> Self {
-        let bytes = val.0.to_ne_bytes();
-
-        Line::new(
-            u32::from_ne_bytes(bytes[0..4].try_into().unwrap()),
-            u32::from_ne_bytes(bytes[4..8].try_into().unwrap()),
-            0_u32,
-            0_u32,
-        )
-    }
-}
-
-impl Add for SignedInteger {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Float(f32);
-
-impl From<u32> for Float {
-    fn from(val: u32) -> Self {
-        Float(f32::from_ne_bytes(val.to_ne_bytes()))
-    }
-}
-
-impl From<Float> for u32 {
-    fn from(val: Float) -> Self {
-        u32::from_ne_bytes(val.0.to_ne_bytes())
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Line {
-    data: [u32; 4],
-}
-
-impl Line {
-    pub fn new(
-        op0: impl Into<u32>,
-        op1: impl Into<u32>,
-        op2: impl Into<u32>,
-        op3: impl Into<u32>,
-    ) -> Self {
-        Line {
-            data: [op0.into(), op1.into(), op2.into(), op3.into()],
-        }
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Float64(f64::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]))
     }
 
-    pub fn as_bytes<const N: usize>(&self) -> [u8; N] {
-        let mut res = [0; N];
-        for (i, val) in self.data.iter().enumerate() {
-            if i == N / 4 {
-                break;
-            }
-
-            res[i * 4..(i + 1) * 4].copy_from_slice(&val.to_ne_bytes());
-        }
-        res
-    }
-}
-
-impl From<[u32; 4]> for Line {
-    fn from(val: [u32; 4]) -> Self {
-        Line { data: val }
-    }
-}
-
-impl From<&[u32; 4]> for Line {
-    fn from(val: &[u32; 4]) -> Self {
-        Line { data: *val }
-    }
-}
-
-impl From<[u8; 16]> for Line {
-    fn from(val: [u8; 16]) -> Self {
-        Line {
-            data: [
-                u32::from_ne_bytes([val[0], val[1], val[2], val[3]]),
-                u32::from_ne_bytes([val[4], val[5], val[6], val[7]]),
-                u32::from_ne_bytes([val[8], val[9], val[10], val[11]]),
-                u32::from_ne_bytes([val[12], val[13], val[14], val[15]]),
-            ],
-        }
-    }
-}
-
-impl From<&[u8; 16]> for Line {
-    fn from(val: &[u8; 16]) -> Self {
-        Line {
-            data: [
-                u32::from_ne_bytes([val[0], val[1], val[2], val[3]]),
-                u32::from_ne_bytes([val[4], val[5], val[6], val[7]]),
-                u32::from_ne_bytes([val[8], val[9], val[10], val[11]]),
-                u32::from_ne_bytes([val[12], val[13], val[14], val[15]]),
-            ],
-        }
+    fn into_bytes(self, bytes: &mut [u8]) {
+        bytes.copy_from_slice(&self.0.to_le_bytes());
     }
 }
 
 macro_rules! instructions {
-    ($($a:literal => $name:ident($($argtype:ident $argname:ident),*) |$mem:ident| $block:expr,)+) => {
-        #[derive(Debug, Clone, Copy, PartialEq)]
+    ($($a:literal => $name:ident($($argname:ident: $argtype:ty),*) |$mem:ident| $block:expr,)+) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum Instruction {
-            $($name($($argtype,)*),)*
-        }
-
-        impl From<Line> for Instruction {
-            fn from(line: Line) -> Self {
-                let mut idx = 0;
-                match line.data[0] {
-                    $($a => Instruction::$name($({
-                        idx += 1;
-                        $argtype::from(line.data[idx])
-                },)*),)*
-                    _ => Instruction::NoOperation(),
-                }
-            }
-        }
-
-        impl From<Instruction> for Line {
-            fn from(instr: Instruction) -> Self {
-                match instr {
-                    $(Instruction::$name($($argname,)*) => {
-                        let mut line = Line::default();
-                        line.data[0] = $a;
-
-                        let mut _idx = 0;
-                        $(
-                            _idx += 1;
-                            line.data[_idx] = $argname.into();
-                        )*
-                        line
-                    })*
-                }
-            }
+            $($name = $a,)*
         }
 
         impl Instruction {
-            pub fn execute(&self, mem: &mut impl crate::machine::Memory) {
+            pub fn execute<Mem: Memory>(&self, mem: &mut Mem) -> Result<(), Mem::Error> {
                 match *self {
-                    $(Instruction::$name($($argname,)*) => {
+                    $(Instruction::$name => {
+                        $(let $argname = mem.read::<$argtype>()?;)*
                         let $mem = mem;
                         $block;
                     })*
                 }
+                Ok(())
+            }
+        }
+
+        impl ReadWriteable for Instruction {
+            const NUM_BYTES: usize = 1;
+
+
+            fn from_bytes(bytes: &[u8]) -> Self {
+                match bytes[0] {
+                    $(x if x == $a => Instruction::$name,)*
+                    _ => Instruction::Noop,
+                }
+            }
+
+
+            fn into_bytes(self, bytes: &mut [u8]) {
+                bytes[0] = self as u8;
             }
         }
     };
 }
 
 instructions! {
-    // Jumps
-    0x01 => Jump(Address to) |mem| mem.set_offset(to),
-    0x02 => JumpIfNotEqual(Address cmpleft, Address cmpright, Address to) |mem| {
-        if mem.get(cmpleft) != mem.get(cmpright) {
-            mem.set_offset(to);
-        }
+    0x00 => Noop() |_mem| {},
+    0x01 => Jump(offset: Offset) |mem| {
+        mem.seek(offset.0)?;
     },
-    0x03 => JumpIfLessThan(Address cmpleft, Address cmpright, Address to) |mem| {
-        if mem.get(cmpleft) < mem.get(cmpright) {
-            mem.set_offset(to);
+    0x02 => JumpIf(cond: Boolean, offset: Offset) |mem| {
+        if cond.0 {
+            mem.seek(offset.0)?;
         }
     },
 
-    // Maths on integers
-    0x11 => AddIntegerUnsigned(Address left, Address right, Address to) |mem| {
-        let left: UnsignedInteger = mem.get(left).unwrap_or_default().into();
-        let right: UnsignedInteger = mem.get(right).unwrap_or_default().into();
-        mem.set(to, left + right);
+    0x10 => AddInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 + b.0))?;
     },
-    0x12 => AddIntegerSigned(Address left, Address right, Address to) |mem| {
-        let left: SignedInteger = mem.get(left).unwrap_or_default().into();
-        let right: SignedInteger = mem.get(right).unwrap_or_default().into();
-        mem.set(to, left + right);
+    0x11 => SubtractInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 - b.0))?;
+    },
+    0x12 => MultiplyInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 * b.0))?;
+    },
+    0x13 => DivideUnsignedInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 / b.0))?;
+    },
+    0x14 => DivideSignedInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64((a.0 as i64 / b.0 as i64) as u64))?;
+    },
+    0x15 => ModuloUnsignedInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 % b.0))?;
+    },
+    0x16 => ModuloSignedInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64((a.0 as i64 % b.0 as i64) as u64))?;
     },
 
-    0x21 => SubtractIntegerUnsigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x22 => SubtractIntegerSigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-
-    0x31 => MultiplyIntegerUnsigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x32 => MultiplyIntegerSigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-
-    0x41 => DivideIntegerUnsigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x42 => DivideIntegerSigned(Address _left, Address _right, Address _to) |_mem| todo!(),
-
-    // Maths on floats
-    0x51 => AddFloat(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x52 => SubtractFloat(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x53 => MultiplyFloat(Address _left, Address _right, Address _to) |_mem| todo!(),
-    0x54 => DivideFloat(Address _left, Address _right, Address _to) |_mem| todo!(),
-
-    // Memory movement
-    0x61 => MoveStatic(Address from, Address to) |mem| {
-        let line = mem.get(from).unwrap_or_default();
-        mem.set(to, line);
+    0x20 => AddInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 + b.0))?;
     },
-    0x62 => MoveIndirect(Address _from, Address _to) |_mem| todo!(),
+    0x21 => SubtractInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 - b.0))?;
+    },
+    0x22 => MultiplyInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 * b.0))?;
+    },
+    0x23 => DivideUnsignedInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 / b.0))?;
+    },
+    0x24 => DivideSignedInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32((a.0 as i32 / b.0 as i32) as u32))?;
+    },
+    0x25 => ModuloUnsignedInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 % b.0))?;
+    },
+    0x26 => ModuloSignedInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32((a.0 as i32 % b.0 as i32) as u32))?;
+    },
 
-    // Syscall
-    0x71 => Syscall(UnsignedInteger _syscall, Address _argument) |_mem| todo!(),
+    0x30 => AddFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0 + b.0))?;
+    },
+    0x31 => SubtractFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0 - b.0))?;
+    },
+    0x32 => MultiplyFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0 * b.0))?;
+    },
+    0x33 => DivideFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0 / b.0))?;
+    },
+    0x34 => ModuloFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0 % b.0))?;
+    },
+    0x35 => PowerFloat32(a: Float32, b: Float32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float32(a.0.powf(b.0)))?;
+    },
+    0x36 => AddFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0 + b.0))?;
+    },
+    0x37 => SubtractFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0 - b.0))?;
+    },
+    0x38 => MultiplyFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0 * b.0))?;
+    },
+    0x39 => DivideFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0 / b.0))?;
+    },
+    0x3A => ModuloFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0 % b.0))?;
+    },
+    0x3B => PowerFloat64(a: Float64, b: Float64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Float64(a.0.powf(b.0)))?;
+    },
 
-    // NOP
-    0x0 => NoOperation() |_mem| {},
+    0x40 => BitwiseAndInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 & b.0))?;
+    },
+    0x41 => BitwiseOrInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 | b.0))?;
+    },
+    0x42 => BitwiseXorInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 ^ b.0))?;
+    },
+    0x43 => BitwiseNotInteger64(a: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(!a.0))?;
+    },
+    0x44 => BitwiseShiftLeftInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 << b.0))?;
+    },
+    0x45 => BitwiseShiftRightInteger64(a: Integer64, b: Integer64, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer64(a.0 >> b.0))?;
+    },
+    0x50 => BitwiseAndInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 & b.0))?;
+    },
+    0x51 => BitwiseOrInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 | b.0))?;
+    },
+    0x52 => BitwiseXorInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 ^ b.0))?;
+    },
+    0x53 => BitwiseNotInteger32(a: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(!a.0))?;
+    },
+    0x54 => BitwiseShiftLeftInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 << b.0))?;
+    },
+    0x55 => BitwiseShiftRightInteger32(a: Integer32, b: Integer32, offset: Offset) |mem| {
+        mem.seek(offset.0)?;
+        mem.write(Integer32(a.0 >> b.0))?;
+    },
+
+    0x60 => Move1(from: Offset, to: Offset) |mem| {
+        mem.seek(from.0)?;
+        let value = mem.read::<[u8; 1]>()?;
+        mem.seek(to.0)?;
+        mem.write(value)?;
+    },
+    0x61 => Move2(from: Offset, to: Offset) |mem| {
+        mem.seek(from.0)?;
+        let value = mem.read::<[u8; 2]>()?;
+        mem.seek(to.0)?;
+        mem.write(value)?;
+    },
+    0x62 => Move4(from: Offset, to: Offset) |mem| {
+        mem.seek(from.0)?;
+        let value = mem.read::<[u8; 4]>()?;
+        mem.seek(to.0)?;
+        mem.write(value)?;
+    },
+    0x63 => Move8(from: Offset, to: Offset) |mem| {
+        mem.seek(from.0)?;
+        let value = mem.read::<[u8; 8]>()?;
+        mem.seek(to.0)?;
+        mem.write(value)?;
+    },
+    0x64 => MoveN(size: [u8; 1], from: Offset, to: Offset) |mem| {
+        mem.seek(from.0)?;
+        let mut value = Vec::with_capacity(size[0] as usize);
+        while value.len() < size[0] as usize {
+            value.push(mem.read::<[u8; 1]>()?);
+        }
+
+        mem.seek(to.0)?;
+        for byte in value {
+            mem.write::<[u8; 1]>(byte)?;
+        }
+    },
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::machine::InMemoryMemory;
 
     use super::*;
 
     #[test]
-    fn can_create_noop_from_line() {
-        let line = Line::from([0, 0, 0, 0]);
-        let instr = Instruction::from(line);
-        assert_eq!(instr, Instruction::NoOperation());
-
-        let line = Line::from([999, 0, 0, 0]);
-        let instr = Instruction::from(line);
-        assert_eq!(instr, Instruction::NoOperation());
+    fn test_executing_jump() {
+        let mut mem = InMemoryMemory::from_vec(vec![0x03, 0x02]);
+        let instruction = Instruction::Jump;
+        instruction.execute(&mut mem).unwrap();
+        assert_eq!(mem.pc, 0x0205);
     }
 
     #[test]
-    fn can_create_jump_from_line() {
-        let line = Line::from([1, 10, 0, 0]);
-        let instr = Instruction::from(line);
-        assert_eq!(instr, Instruction::Jump(10.into()));
+    fn test_executing_jump_if_true() {
+        let mut mem = InMemoryMemory::from_vec(vec![0x01, 0x03, 0x02]);
+        let instruction = Instruction::JumpIf;
+        instruction.execute(&mut mem).unwrap();
+        assert_eq!(mem.pc, 0x0206);
     }
 
     #[test]
-    fn can_create_extended_jump_from_line() {
-        let line = Line::from([2, 10, 11, 12]);
-        let instr = Instruction::from(line);
-        assert_eq!(
-            instr,
-            Instruction::JumpIfNotEqual(Address::from(10), Address::from(11), Address::from(12))
-        );
+    fn test_executing_jump_if_false() {
+        let mut mem = InMemoryMemory::from_vec(vec![0x00, 0x03, 0x02]);
+        let instruction = Instruction::JumpIf;
+        instruction.execute(&mut mem).unwrap();
+        assert_eq!(mem.pc, 0x03);
     }
 
     #[test]
-    fn can_create_line_from_byte_array() {
-        let line = Line::from([
-            0x63_u8, 0x00, 0x00, 0x00, 0x99, 0x99, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
+    fn test_executing_i32_add() {
+        let mut mem = InMemoryMemory::from_vec(vec![
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
-        assert_eq!(line, Line::from([0x63, 0x9999, 0x06, 0x00]))
+        let instruction = Instruction::AddInteger32;
+        instruction.execute(&mut mem).unwrap();
+
+        assert_eq!(mem.pc, 10);
+        assert_eq!(mem.read::<Integer32>().unwrap(), Integer32(0));
+        assert_eq!(mem.memory.len(), 14);
     }
 }

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 mod machine;
+mod memory;
 mod types;
 
 #[derive(Debug, clap::Parser)]
@@ -14,7 +15,7 @@ struct Args {
 fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
 
-    let memory = machine::FileMemory::new(args.name).unwrap();
+    let memory = memory::FileMemory::new(args.name).unwrap();
     let mut machine = machine::Machine::with_memory(memory);
 
     machine.run()?;

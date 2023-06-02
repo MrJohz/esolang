@@ -1,4 +1,4 @@
-use crate::machine::Memory;
+use crate::memory::Memory;
 
 pub trait ReadWriteable {
     // NOTE: With full const generics, we can(?) replace
@@ -364,7 +364,7 @@ instructions! {
 
 #[cfg(test)]
 mod tests {
-    use crate::machine::InMemoryMemory;
+    use crate::memory::InMemoryMemory;
 
     use super::*;
 

@@ -1,8 +1,5 @@
-mod memory;
-
+use crate::memory::Memory;
 use crate::types::Instruction;
-
-pub use self::memory::{FileMemory, InMemoryMemory, Memory};
 
 #[derive(Debug, Default)]
 pub struct Machine<Mem: Memory> {
@@ -25,7 +22,7 @@ impl<Mem: Memory> Machine<Mem> {
 
 #[cfg(test)]
 mod tests {
-    use crate::machine::memory::InMemoryMemory;
+    use crate::memory::InMemoryMemory;
 
     use super::*;
 

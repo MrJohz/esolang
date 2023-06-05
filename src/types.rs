@@ -520,18 +520,19 @@ instructions! {
         mem.seek(to.0)?;
         mem.write(value)?;
     },
-    0x64 => MoveN(size: [u8; 1], from: Offset, to: Offset) |mem| {
+    0x64 => MoveN(size: u8, from: Offset, to: Offset) |mem| {
         mem.seek(from.0)?;
-        let mut value = Vec::with_capacity(size[0] as usize);
-        while value.len() < size[0] as usize {
-            value.push(mem.read::<[u8; 1]>()?);
+        let mut value = Vec::with_capacity(size as usize);
+        while value.len() < size as usize {
+            value.push(mem.read::<u8>()?);
         }
 
         mem.seek(to.0)?;
         for byte in value {
-            mem.write::<[u8; 1]>(byte)?;
+            mem.write::<u8>(byte)?;
         }
     },
+    0xA0 => PrintFloat() |mem| {todo!()},
 }
 
 #[cfg(test)]

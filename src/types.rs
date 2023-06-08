@@ -67,7 +67,7 @@ impl<T1: ReadWriteable, T2: ReadWriteable> ReadWriteable for (T1, T2) {
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        self.0.into_bytes(bytes);
+        self.0.into_bytes(&mut bytes[0..T1::NUM_BYTES]);
         self.1.into_bytes(&mut bytes[T1::NUM_BYTES..]);
     }
 }
@@ -84,7 +84,7 @@ impl<T1: ReadWriteable, T2: ReadWriteable, T3: ReadWriteable> ReadWriteable for 
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        self.0.into_bytes(bytes);
+        self.0.into_bytes(&mut bytes[0..T1::NUM_BYTES]);
         self.1
             .into_bytes(&mut bytes[T1::NUM_BYTES..T1::NUM_BYTES + T2::NUM_BYTES]);
         self.2
@@ -110,7 +110,7 @@ impl<T1: ReadWriteable, T2: ReadWriteable, T3: ReadWriteable, T4: ReadWriteable>
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        self.0.into_bytes(bytes);
+        self.0.into_bytes(&mut bytes[0..T1::NUM_BYTES]);
         self.1
             .into_bytes(&mut bytes[T1::NUM_BYTES..T1::NUM_BYTES + T2::NUM_BYTES]);
         self.2.into_bytes(
@@ -150,7 +150,7 @@ impl<
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        self.0.into_bytes(bytes);
+        self.0.into_bytes(&mut bytes[0..T1::NUM_BYTES]);
         self.1
             .into_bytes(&mut bytes[T1::NUM_BYTES..T1::NUM_BYTES + T2::NUM_BYTES]);
         self.2.into_bytes(
@@ -515,15 +515,28 @@ mod tests {
     }
 
     #[test]
-    fn test_executing_i32_add() {
-        let mut mem = InMemoryMemory::from_vec(vec![
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ]);
+    fn test_executing_u32_add_on_zeroes() {
+        let mut mem = InMemoryMemory::from_vec(vec![0x00; 12]);
         let instruction = Instruction::AddInteger32;
         instruction.execute(&mut mem).unwrap();
 
-        assert_eq!(mem.pc, 10);
+        assert_eq!(mem.pc, 12);
         assert_eq!(mem.read::<u32>().unwrap(), 0);
-        assert_eq!(mem.memory.len(), 14);
+        assert_eq!(mem.memory.len(), 16);
+    }
+
+    #[test]
+    fn test_executing_u32_add_on_nonzero_values() {
+        let instruction = Instruction::AddInteger32;
+        let mut mem = InMemoryMemory::builder()
+            .data(5_u32)
+            .data(15_u32)
+            .data((Offset(0), Offset(0)))
+            .build();
+        instruction.execute(&mut mem).unwrap();
+
+        assert_eq!(mem.pc, 12);
+        assert_eq!(mem.read::<u32>().unwrap(), 20);
+        assert_eq!(mem.memory.len(), 16);
     }
 }

@@ -183,81 +183,82 @@ impl ReadWriteable for Offset {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Boolean(pub bool);
+pub struct OffsetPair(pub Offset, pub Offset);
 
-impl ReadWriteable for Boolean {
+impl ReadWriteable for OffsetPair {
+    const NUM_BYTES: usize = <(Offset, Offset) as ReadWriteable>::NUM_BYTES;
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        let (left, right) = <_ as ReadWriteable>::from_bytes(bytes);
+        Self(left, right)
+    }
+
+    fn into_bytes(self, bytes: &mut [u8]) {
+        (self.0, self.1).into_bytes(bytes)
+    }
+}
+
+impl ReadWriteable for bool {
     const NUM_BYTES: usize = 1;
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        Boolean(bytes[0] != 0)
+        bytes[0] != 0
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        bytes[0] = self.0 as u8;
+        bytes[0] = self as u8;
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Integer64(pub u64);
-
-impl ReadWriteable for Integer64 {
+impl ReadWriteable for u64 {
     const NUM_BYTES: usize = 8;
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        Integer64(u64::from_le_bytes([
+        u64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-        ]))
+        ])
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.0.to_le_bytes());
+        bytes.copy_from_slice(&self.to_le_bytes());
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Integer32(pub u32);
-
-impl ReadWriteable for Integer32 {
+impl ReadWriteable for u32 {
     const NUM_BYTES: usize = 4;
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        Integer32(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.0.to_le_bytes());
+        bytes.copy_from_slice(&self.to_le_bytes());
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Float32(pub f32);
-
-impl ReadWriteable for Float32 {
+impl ReadWriteable for f32 {
     const NUM_BYTES: usize = 4;
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        Float32(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.0.to_le_bytes());
+        bytes.copy_from_slice(&self.to_le_bytes());
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Float64(pub f64);
-
-impl ReadWriteable for Float64 {
+impl ReadWriteable for f64 {
     const NUM_BYTES: usize = 8;
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        Float64(f64::from_le_bytes([
+        f64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-        ]))
+        ])
     }
 
     fn into_bytes(self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.0.to_le_bytes());
+        bytes.copy_from_slice(&self.to_le_bytes());
     }
 }
 
@@ -303,236 +304,184 @@ macro_rules! instructions {
 instructions! {
     0x00 => Noop() |_mem| {},
     0x01 => Jump(offset: Offset) |mem| {
-        mem.seek(offset.0)?;
+        mem.seek(offset)?;
     },
-    0x02 => JumpIf(cond: Boolean, offset: Offset) |mem| {
-        if cond.0 {
-            mem.seek(offset.0)?;
+    0x02 => JumpIf(cond: bool, offset: Offset) |mem| {
+        if cond {
+            mem.seek(offset)?;
         }
     },
 
-    0x10 => AddInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64(a.0 + b.0))?;
-        mem.seek(ret.0)?;
+    0x10 => AddInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left + right)?;
+        mem.seek(output.1)?;
     },
-    0x11 => SubtractInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64(a.0 - b.0))?;
-        mem.seek(ret.0)?;
+    0x11 => SubtractInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left - right)?;
+        mem.seek(output.1)?;
     },
-    0x12 => MultiplyInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64(a.0 * b.0))?;
-        mem.seek(ret.0)?;
+    0x12 => MultiplyInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left * right)?;
+        mem.seek(output.1)?;
     },
-    0x13 => DivideUnsignedInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64(a.0 / b.0))?;
-        mem.seek(ret.0)?;
+    0x13 => DivideUnsignedInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left / right)?;
+        mem.seek(output.1)?;
     },
-    0x14 => DivideSignedInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64((a.0 as i64 / b.0 as i64) as u64))?;
-        mem.seek(ret.0)?;
+    0x14 => DivideSignedInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write((left as i64 / right as i64) as u64)?;
+        mem.seek(output.1)?;
     },
-    0x15 => ModuloUnsignedInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64(a.0 % b.0))?;
-        mem.seek(ret.0)?;
+    0x15 => ModuloUnsignedInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left % right)?;
+        mem.seek(output.1)?;
     },
-    0x16 => ModuloSignedInteger64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer64>()?;
-        let b = mem.read::<Integer64>()?;
-        mem.write(Integer64((a.0 as i64 % b.0 as i64) as u64))?;
-        mem.seek(ret.0)?;
+    0x16 => ModuloSignedInteger64(left: u64, right: u64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write((left as i64 % right as i64) as u64)?;
+        mem.seek(output.1)?;
     },
 
-    0x20 => AddInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32(a.0 + b.0))?;
-        mem.seek(ret.0)?;
+    0x20 => AddInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left + right)?;
+        mem.seek(output.1)?;
     },
-    0x21 => SubtractInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32(a.0 - b.0))?;
-        mem.seek(ret.0)?;
+    0x21 => SubtractInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left - right)?;
+        mem.seek(output.1)?;
     },
-    0x22 => MultiplyInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32(a.0 * b.0))?;
-        mem.seek(ret.0)?;
+    0x22 => MultiplyInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left * right)?;
+        mem.seek(output.1)?;
     },
-    0x23 => DivideUnsignedInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32(a.0 / b.0))?;
-        mem.seek(ret.0)?;
+    0x23 => DivideUnsignedInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left / right)?;
+        mem.seek(output.1)?;
     },
-    0x24 => DivideSignedInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32((a.0 as i32 / b.0 as i32) as u32))?;
-        mem.seek(ret.0)?;
+    0x24 => DivideSignedInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write((left as i32 / right as i32) as u32)?;
+        mem.seek(output.1)?;
     },
-    0x25 => ModuloUnsignedInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32(a.0 % b.0))?;
-        mem.seek(ret.0)?;
+    0x25 => ModuloUnsignedInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left % right)?;
+        mem.seek(output.1)?;
     },
-    0x26 => ModuloSignedInteger32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Integer32>()?;
-        let b = mem.read::<Integer32>()?;
-        mem.write(Integer32((a.0 as i32 % b.0 as i32) as u32))?;
-        mem.seek(ret.0)?;
+    0x26 => ModuloSignedInteger32(left: u32, right: u32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write((left as i32 % right as i32) as u32)?;
+        mem.seek(output.1)?;
     },
 
-    0x30 => AddFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0 + b.0))?;
-        mem.seek(ret.0)?;
+    0x30 => AddFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left + right)?;
+        mem.seek(output.1)?;
     },
-    0x31 => SubtractFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0 - b.0))?;
-        mem.seek(ret.0)?;
+    0x31 => SubtractFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left - right)?;
+        mem.seek(output.1)?;
     },
-    0x32 => MultiplyFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0 * b.0))?;
-        mem.seek(ret.0)?;
+    0x32 => MultiplyFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left * right)?;
+        mem.seek(output.1)?;
     },
-    0x33 => DivideFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0 / b.0))?;
-        mem.seek(ret.0)?;
+    0x33 => DivideFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left / right)?;
+        mem.seek(output.1)?;
     },
-    0x34 => ModuloFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0 % b.0))?;
-        mem.seek(ret.0)?;
+    0x34 => ModuloFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left % right)?;
+        mem.seek(output.1)?;
     },
-    0x35 => PowerFloat32(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float32>()?;
-        let b = mem.read::<Float32>()?;
-        mem.write(Float32(a.0.powf(b.0)))?;
-        mem.seek(ret.0)?;
+    0x35 => PowerFloat32(left: f32, right: f32, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left.powf(right))?;
+        mem.seek(output.1)?;
     },
-    0x36 => AddFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0 + b.0))?;
-        mem.seek(ret.0)?;
+    0x36 => AddFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left + right)?;
+        mem.seek(output.1)?;
     },
-    0x37 => SubtractFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0 - b.0))?;
-        mem.seek(ret.0)?;
+    0x37 => SubtractFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left - right)?;
+        mem.seek(output.1)?;
     },
-    0x38 => MultiplyFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0 * b.0))?;
-        mem.seek(ret.0)?;
+    0x38 => MultiplyFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left * right)?;
+        mem.seek(output.1)?;
     },
-    0x39 => DivideFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0 / b.0))?;
-        mem.seek(ret.0)?;
+    0x39 => DivideFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left / right)?;
+        mem.seek(output.1)?;
     },
-    0x3A => ModuloFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0 % b.0))?;
-        mem.seek(ret.0)?;
+    0x3A => ModuloFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left % right)?;
+        mem.seek(output.1)?;
     },
-    0x3B => PowerFloat64(start: Offset, ret: Offset) |mem| {
-        mem.seek(start.0)?;
-        let a = mem.read::<Float64>()?;
-        let b = mem.read::<Float64>()?;
-        mem.write(Float64(a.0.powf(b.0)))?;
-        mem.seek(ret.0)?;
+    0x3B => PowerFloat64(left: f64, right: f64, output: OffsetPair) |mem| {
+        mem.seek(output.0)?;
+        mem.write(left.powf(right))?;
+        mem.seek(output.1)?;
     },
 
     0x60 => Move1(from: Offset, to: Offset) |mem| {
-        mem.seek(from.0)?;
+        mem.seek(from)?;
         let value = mem.read::<[u8; 1]>()?;
-        mem.seek(to.0)?;
+        mem.seek(to)?;
         mem.write(value)?;
     },
     0x61 => Move2(from: Offset, to: Offset) |mem| {
-        mem.seek(from.0)?;
+        mem.seek(from)?;
         let value = mem.read::<[u8; 2]>()?;
-        mem.seek(to.0)?;
+        mem.seek(to)?;
         mem.write(value)?;
     },
     0x62 => Move4(from: Offset, to: Offset) |mem| {
-        mem.seek(from.0)?;
+        mem.seek(from)?;
         let value = mem.read::<[u8; 4]>()?;
-        mem.seek(to.0)?;
+        mem.seek(to)?;
         mem.write(value)?;
     },
     0x63 => Move8(from: Offset, to: Offset) |mem| {
-        mem.seek(from.0)?;
+        mem.seek(from)?;
         let value = mem.read::<[u8; 8]>()?;
-        mem.seek(to.0)?;
+        mem.seek(to)?;
         mem.write(value)?;
     },
     0x64 => MoveN(size: u8, from: Offset, to: Offset) |mem| {
-        mem.seek(from.0)?;
+        mem.seek(from)?;
         let mut value = Vec::with_capacity(size as usize);
         while value.len() < size as usize {
             value.push(mem.read::<u8>()?);
         }
 
-        mem.seek(to.0)?;
+        mem.seek(to)?;
         for byte in value {
             mem.write::<u8>(byte)?;
         }
     },
-    0xA0 => PrintFloat() |mem| {todo!()},
+    0xA0 => PrintFloat() |_mem| {todo!()},
 }
 
 #[cfg(test)]
@@ -574,7 +523,7 @@ mod tests {
         instruction.execute(&mut mem).unwrap();
 
         assert_eq!(mem.pc, 10);
-        assert_eq!(mem.read::<Integer32>().unwrap(), Integer32(0));
+        assert_eq!(mem.read::<u32>().unwrap(), 0);
         assert_eq!(mem.memory.len(), 14);
     }
 }

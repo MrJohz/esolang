@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::types::ReadWriteable;
+use crate::types::{Offset, ReadWriteable};
 
 use super::Memory;
 
@@ -58,8 +58,8 @@ impl Memory for FileMemory {
         Ok(())
     }
 
-    fn seek(&mut self, pos: i16) -> Result<(), Self::Error> {
-        self.file.seek(SeekFrom::Current(pos as i64))?;
+    fn seek(&mut self, pos: Offset) -> Result<(), Self::Error> {
+        self.file.seek(SeekFrom::Current(pos.0 as i64))?;
         Ok(())
     }
 }

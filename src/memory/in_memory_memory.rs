@@ -1,4 +1,4 @@
-use crate::types::{Instruction, ReadWriteable};
+use crate::types::{Instruction, Offset, ReadWriteable};
 
 use super::Memory;
 
@@ -46,8 +46,8 @@ impl Memory for InMemoryMemory {
         Ok(())
     }
 
-    fn seek(&mut self, pos: i16) -> Result<(), Self::Error> {
-        self.pc = (self.pc as i16 + pos) as usize;
+    fn seek(&mut self, pos: Offset) -> Result<(), Self::Error> {
+        self.pc = (self.pc as i16 + pos.0) as usize;
         Ok(())
     }
 }
@@ -58,7 +58,7 @@ pub struct InMemoryBuilder {
 }
 
 impl InMemoryBuilder {
-    pub fn new() -> Self {
+    fn new() -> Self {
         InMemoryBuilder { memory: Vec::new() }
     }
 

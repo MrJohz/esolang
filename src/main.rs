@@ -14,7 +14,7 @@ struct Args {
 fn main() -> Result<(), std::io::Error> {
     let args = Args::parse();
 
-    let memory = memory::FileMemory::new(args.name).unwrap();
+    let memory = memory::FileMemory::with_path(args.name).unwrap();
     let mut machine = machine::Machine::with_memory(memory);
 
     machine.run()?;

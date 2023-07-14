@@ -1,3 +1,8 @@
+use std::{
+    fs::File,
+    io::{self, Write},
+};
+
 use crate::types::{Instruction, Offset, ReadWriteable};
 
 use super::Memory;
@@ -85,6 +90,12 @@ impl InMemoryBuilder {
     pub fn bytes(mut self, bytes: &[u8]) -> Self {
         self.memory.extend_from_slice(bytes);
         self
+    }
+
+    pub fn to_tmp_file(self) -> Result<File, io::Error> {
+        let mut file = tempfile::tempfile()?;
+        file.write_all(&self.memory)?;
+        Ok(file)
     }
 
     pub fn build(self) -> InMemoryMemory {

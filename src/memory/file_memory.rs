@@ -14,7 +14,7 @@ pub struct FileMemory {
 }
 
 impl FileMemory {
-    pub fn new(file: impl AsRef<Path>) -> IoResult<Self> {
+    pub fn with_path(file: impl AsRef<Path>) -> IoResult<Self> {
         Ok(FileMemory {
             file: File::options()
                 .read(true)
@@ -22,6 +22,10 @@ impl FileMemory {
                 .create(true)
                 .open(file.as_ref())?,
         })
+    }
+
+    pub fn with_file(file: File) -> Self {
+        Self { file }
     }
 }
 
